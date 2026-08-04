@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+build/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+xcuserdata/
+
+# Swift Package Manager
+.build/
+
+# User settings
+*.swp
+*.mode1v3
+*.mode2v3
+
+# Archives
+*.xcarchive
+
+# Fastlane
+fastlane/report.xml
+fastlane/screenshots
+fastlane/test_output
+
+# CocoaPods
+Pods/
+
+# SwiftPM
+Package.resolved
