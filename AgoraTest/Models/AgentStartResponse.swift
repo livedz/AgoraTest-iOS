@@ -24,3 +24,15 @@ struct AgoraAgentInfo: Decodable {
         case status
     }
 }
+
+struct AgentStartRequest: Encodable {
+    let channel: String
+}
+
+struct AgentStopRequest: Encodable {
+    let agentId: String
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+    }
+}

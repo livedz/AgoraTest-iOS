@@ -58,7 +58,11 @@ struct AudioCallView: View {
             .padding(.top, 12)
             .padding(.bottom, 28)
         }
-        .onAppear {
+        .task {
+            guard agoraManager.callState == .idle else {
+                return
+            }
+
             agoraManager.joinChannel()
         }
     }
@@ -187,8 +191,7 @@ struct AudioCallView: View {
                 title: "End",
                 systemImage: "phone.down.fill",
                 style: .destructive,
-                isDisabled: !agoraManager.isJoined &&
-                    agoraManager.callState != .connecting
+                isDisabled: !agoraManager.isJoined
             ) {
                 agoraManager.leaveChannel()
             }

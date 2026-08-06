@@ -19,7 +19,9 @@ final class AgoraManager: NSObject, ObservableObject {
     @Published private(set) var isJoined = false
     @Published private(set) var isMuted = false
     @Published private(set) var isSpeakerEnabled = true
+
     @Published private(set) var isStartingAgent = false
+    @Published private(set) var isStoppingAgent = false
 
     @Published private(set) var statusMessage = "Not connected"
     @Published private(set) var microphonePermission = "Not requested"
@@ -32,18 +34,23 @@ final class AgoraManager: NSObject, ObservableObject {
 
     @Published private(set) var callState: CallState = .idle
     @Published private(set) var elapsedSeconds = 0
+    
+    private var isMicSuppressedForRemoteAudio = false
+    private var restoreMicrophoneTask: Task<Void, Never>?
 
-    // MARK: Private Properties
+    // MARK: Agora
 
     private var engine: AgoraRtcEngineKit?
     private var callTimer: Timer?
 
+    // Simulator uses your Mac backend.
     private let backendBaseURL = "http://127.0.0.1:8000"
+
     private let channelName = "Test"
     private let localUID: UInt = 1001
 
-    // Prevents duplicate /agent/start requests.
     private var didRequestAgentStart = false
+    private var isEndingCall = false
 
     // MARK: Initialization
 
@@ -127,6 +134,7 @@ final class AgoraManager: NSObject, ObservableObject {
             return
         }
 
+        isEndingCall = false
         callState = .connecting
         statusMessage = "Requesting microphone permission…"
 
@@ -178,7 +186,7 @@ final class AgoraManager: NSObject, ObservableObject {
             }
 
             guard (200...299).contains(httpResponse.statusCode) else {
-                let backendMessage = String(
+                let message = String(
                     data: data,
                     encoding: .utf8
                 ) ?? "Unknown backend error"
@@ -186,7 +194,7 @@ final class AgoraManager: NSObject, ObservableObject {
                 handleJoinFailure(
                     "Token request failed "
                     + "\(httpResponse.statusCode): "
-                    + backendMessage
+                    + message
                 )
                 return
             }
@@ -250,8 +258,9 @@ final class AgoraManager: NSObject, ObservableObject {
         )
 
         guard !cleanAppID.isEmpty else {
-            statusMessage = "Backend returned an empty App ID"
-            callState = .idle
+            handleJoinFailure(
+                "Backend returned an empty App ID"
+            )
             return
         }
 
@@ -263,8 +272,13 @@ final class AgoraManager: NSObject, ObservableObject {
             delegate: self
         )
 
+        // Enable the Agora audio system.
         agoraEngine.enableAudio()
 
+        // Explicitly enable microphone capture and publication.
+        agoraEngine.enableLocalAudio(true)
+
+        // Receive local and remote volume reports.
         agoraEngine.enableAudioVolumeIndication(
             200,
             smooth: 3,
@@ -301,6 +315,10 @@ final class AgoraManager: NSObject, ObservableObject {
             )
             return
         }
+
+        // Ensure the microphone is enabled before joining.
+        engine.enableLocalAudio(true)
+        engine.muteLocalAudioStream(false)
 
         let options = AgoraRtcChannelMediaOptions()
 
@@ -369,10 +387,6 @@ final class AgoraManager: NSObject, ObservableObject {
             return
         }
 
-        struct AgentRequestBody: Encodable {
-            let channel: String
-        }
-
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -389,7 +403,9 @@ final class AgoraManager: NSObject, ObservableObject {
             )
 
             request.httpBody = try JSONEncoder().encode(
-                AgentRequestBody(channel: channel)
+                AgentStartRequest(
+                    channel: channel
+                )
             )
 
             let (data, response) = try await URLSession.shared.data(
@@ -405,7 +421,7 @@ final class AgoraManager: NSObject, ObservableObject {
             guard (200...299).contains(httpResponse.statusCode) else {
                 didRequestAgentStart = false
 
-                let backendMessage = String(
+                let message = String(
                     data: data,
                     encoding: .utf8
                 ) ?? "Unknown backend error"
@@ -413,7 +429,7 @@ final class AgoraManager: NSObject, ObservableObject {
                 statusMessage =
                     "Agent start failed "
                     + "\(httpResponse.statusCode): "
-                    + backendMessage
+                    + message
 
                 return
             }
@@ -440,14 +456,110 @@ final class AgoraManager: NSObject, ObservableObject {
         }
     }
 
+    // MARK: Stop AI Agent
+
+    private func stopAgent() async {
+        guard let agentID,
+              !agentID.isEmpty else {
+            print("ℹ️ No running agent to stop")
+            return
+        }
+
+        guard !isStoppingAgent else {
+            return
+        }
+
+        isStoppingAgent = true
+
+        defer {
+            isStoppingAgent = false
+        }
+
+        guard let url = URL(
+            string: "\(backendBaseURL)/agent/stop"
+        ) else {
+            print("❌ Invalid agent stop URL")
+            return
+        }
+
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 30
+
+            request.setValue(
+                "application/json",
+                forHTTPHeaderField: "Content-Type"
+            )
+
+            request.setValue(
+                "application/json",
+                forHTTPHeaderField: "Accept"
+            )
+
+            request.httpBody = try JSONEncoder().encode(
+                AgentStopRequest(
+                    agentId: agentID
+                )
+            )
+
+            let (data, response) = try await URLSession.shared.data(
+                for: request
+            )
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ Invalid agent stop response")
+                return
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let message = String(
+                    data: data,
+                    encoding: .utf8
+                ) ?? "Unknown backend error"
+
+                print(
+                    "❌ Agent stop failed:",
+                    httpResponse.statusCode,
+                    message
+                )
+                return
+            }
+
+            print("✅ Agent stopped:", agentID)
+
+        } catch {
+            print(
+                "❌ Agent stop request failed:",
+                error.localizedDescription
+            )
+        }
+    }
+
     // MARK: Leave Channel
 
     func leaveChannel() {
+        guard !isEndingCall else {
+            return
+        }
+
         guard isJoined || callState == .connecting else {
             statusMessage = "Not connected"
             return
         }
 
+        isEndingCall = true
+        statusMessage = "Ending call…"
+
+        Task {
+            // Stop the AI agent before leaving the RTC channel.
+            await stopAgent()
+
+            finishLeavingChannel()
+        }
+    }
+
+    private func finishLeavingChannel() {
         engine?.leaveChannel(nil)
 
         stopCallTimer()
@@ -455,6 +567,7 @@ final class AgoraManager: NSObject, ObservableObject {
 
         callState = .ended
         statusMessage = "Call ended"
+        isEndingCall = false
     }
 
     // MARK: Microphone
@@ -466,26 +579,23 @@ final class AgoraManager: NSObject, ObservableObject {
         }
 
         let newMutedState = !isMuted
-
-        let result = engine?.muteLocalAudioStream(
-            newMutedState
-        ) ?? -1
-
-        guard result == 0 else {
-            statusMessage =
-                "Microphone update failed: \(result)"
-            return
-        }
-
         isMuted = newMutedState
 
         if newMutedState {
+            restoreMicrophoneTask?.cancel()
+            engine?.muteLocalAudioStream(true)
+
             localAudioLevel = 0
             statusMessage = "Microphone muted"
+            print("🔇 User muted microphone")
         } else {
-            statusMessage = remoteUserID == nil
-                ? "Waiting for assistant to join…"
-                : "Microphone unmuted"
+            if isMicSuppressedForRemoteAudio {
+                statusMessage = "Mio is speaking…"
+            } else {
+                engine?.muteLocalAudioStream(false)
+                statusMessage = "Microphone unmuted"
+                print("🎤 User unmuted microphone")
+            }
         }
     }
 
@@ -544,7 +654,9 @@ final class AgoraManager: NSObject, ObservableObject {
         isJoined = false
         isMuted = false
         isSpeakerEnabled = true
+
         isStartingAgent = false
+        isStoppingAgent = false
 
         remoteUserID = nil
         agentID = nil
@@ -553,6 +665,9 @@ final class AgoraManager: NSObject, ObservableObject {
         remoteAudioLevel = 0
 
         didRequestAgentStart = false
+        restoreMicrophoneTask?.cancel()
+        restoreMicrophoneTask = nil
+        isMicSuppressedForRemoteAudio = false
     }
 
     private func agoraJoinErrorMessage(
@@ -585,6 +700,51 @@ final class AgoraManager: NSObject, ObservableObject {
         callTimer?.invalidate()
         engine?.leaveChannel(nil)
         AgoraRtcEngineKit.destroy()
+    }
+    
+    private func suppressMicrophoneWhileAssistantSpeaks() {
+        restoreMicrophoneTask?.cancel()
+        restoreMicrophoneTask = nil
+
+        guard !isMicSuppressedForRemoteAudio else {
+            return
+        }
+
+        isMicSuppressedForRemoteAudio = true
+
+        // Do not change isMuted because this is automatic,
+        // not a user mute action.
+        engine?.muteLocalAudioStream(true)
+
+        print("🔇 Microphone suppressed while Mio speaks")
+    }
+
+    private func restoreMicrophoneAfterAssistantStops() {
+        restoreMicrophoneTask?.cancel()
+
+        restoreMicrophoneTask = Task { [weak self] in
+            try? await Task.sleep(
+                for: .milliseconds(450)
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run {
+                guard let self else {
+                    return
+                }
+
+                self.isMicSuppressedForRemoteAudio = false
+
+                // Keep muted if the user manually pressed Mute.
+                if !self.isMuted {
+                    self.engine?.muteLocalAudioStream(false)
+                    print("🎤 Microphone restored")
+                }
+            }
+        }
     }
 }
 
@@ -644,7 +804,10 @@ extension AgoraManager: AgoraRtcEngineDelegate {
 
             self.remoteUserID = nil
             self.remoteAudioLevel = 0
-            self.statusMessage = "Assistant disconnected"
+
+            if !self.isEndingCall {
+                self.statusMessage = "Assistant disconnected"
+            }
         }
     }
 
@@ -675,6 +838,65 @@ extension AgoraManager: AgoraRtcEngineDelegate {
                 : currentLocalLevel
 
             self.remoteAudioLevel = currentRemoteLevel
+
+            // Temporary debugging.
+            if currentLocalLevel > 0 || currentRemoteLevel > 0 {
+                print(
+                    "🎤 Local:",
+                    currentLocalLevel,
+                    "🔊 Remote:",
+                    currentRemoteLevel
+                )
+            }
+        }
+    }
+
+    nonisolated func rtcEngine(
+        _ engine: AgoraRtcEngineKit,
+        localAudioStateChanged state: AgoraAudioLocalState,
+        reason: AgoraAudioLocalReason
+    ) {
+        print(
+            "🎤 Local audio state:",
+            state.rawValue,
+            "reason:",
+            reason.rawValue
+        )
+    }
+    
+    nonisolated func rtcEngine(
+        _ engine: AgoraRtcEngineKit,
+        remoteAudioStateChangedOfUid uid: UInt,
+        state: AgoraAudioRemoteState,
+        reason: AgoraAudioRemoteReason,
+        elapsed: Int
+    ) {
+        print(
+            "🔊 Remote audio UID:",
+            uid,
+            "state:",
+            state.rawValue,
+            "reason:",
+            reason.rawValue
+        )
+
+        Task { @MainActor in
+            guard self.remoteUserID == uid else {
+                return
+            }
+
+            switch state.rawValue {
+            case 1, 2:
+                // Starting or decoding remote audio.
+                self.suppressMicrophoneWhileAssistantSpeaks()
+
+            case 0, 3, 4:
+                // Stopped, frozen or failed.
+                self.restoreMicrophoneAfterAssistantStops()
+
+            default:
+                break
+            }
         }
     }
 
@@ -709,7 +931,7 @@ extension AgoraManager: AgoraRtcEngineDelegate {
                     "Connection failed: \(reason.rawValue)"
 
             case .disconnected:
-                if self.isJoined {
+                if self.isJoined && !self.isEndingCall {
                     self.stopCallTimer()
                     self.resetCallState()
                     self.callState = .ended
@@ -740,4 +962,5 @@ extension AgoraManager: AgoraRtcEngineDelegate {
             }
         }
     }
+    
 }
