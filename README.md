@@ -1,29 +1,130 @@
-# Agora AI Voice Assistant (SwiftUI + FastAPI)
+# 🎙️ Mio — Real-Time AI Voice Companion
 
-A real-time AI voice assistant built with **SwiftUI**, **Agora RTC**, **FastAPI**, and **Agora Conversational AI**.
+A real-time AI voice companion that allows users to have natural, two-way conversations with an AI assistant using their voice.
 
-The project demonstrates how to build a two-way voice conversation between an iOS application and an AI assistant using Agora's Conversational AI platform.
+Instead of typing messages into a chat interface, users can simply speak naturally. Mio listens, understands the conversation, and responds back with AI-generated speech in real time.
 
-## ✨ Features
-
-- 🎙️ Real-time voice calls using Agora RTC
-- 🤖 AI Assistant powered by Agora Conversational AI
-- 🧠 Gemini LLM integration (BYOK)
-- 🗣️ Deepgram Speech-to-Text (ASR)
-- 🔊 MiniMax Text-to-Speech (TTS)
-- 🔐 Secure RTC token generation using FastAPI
-- 📱 Modern SwiftUI calling interface
-- ⏱️ Live call timer
-- 🎤 Mute / Unmute microphone
-- 🔈 Speaker toggle
-- 📶 Connection state monitoring
-- 🤖 Automatic AI agent start & stop
+Built with **SwiftUI**, **Agora RTC**, **FastAPI**, and **Agora Conversational AI**.
 
 ---
 
-## Architecture
+## 💡 The Problem
 
+Most AI assistants are primarily text-based.
+
+Users need to:
+
+⌨️ Type a question
+⌨️ Wait for a response
+⌨️ Read the answer
+⌨️ Type a follow-up question
+
+This can feel slow and unnatural, especially when users want to have a longer or more conversational interaction.
+
+---
+
+## ✨ The Solution
+
+**Mio enables natural, real-time voice conversations with an AI assistant.**
+
+Users can simply speak:
+
+> 🎙️ "I have an interview tomorrow. Can you help me prepare?"
+
+Mio listens to the user, understands the conversation, and responds naturally through voice.
+
+The conversation continues in real time:
+
+```text
+User speaks 🎙️
+       ↓
+Mio listens 👂
+       ↓
+Speech is converted to text
+       ↓
+AI understands the request 🧠
+       ↓
+AI generates a response
+       ↓
+Mio responds with voice 🔊
 ```
+
+---
+
+## 🎯 End-User Use Case
+
+Mio is designed for natural conversational experiences where typing is not the most convenient way to interact with AI.
+
+For example:
+
+### 💼 Interview Preparation
+
+> "I have a Senior iOS Developer interview tomorrow. Can you ask me some interview questions?"
+
+Mio can begin a natural voice conversation and continue asking follow-up questions.
+
+### 📚 Learning & Practice
+
+> "Help me practice SwiftUI concepts."
+
+The user can learn through a natural back-and-forth voice conversation.
+
+### 🧠 Everyday AI Conversations
+
+> "Help me plan my day."
+
+> "Explain this topic to me simply."
+
+> "Let's practice English conversation."
+
+---
+
+## 🔄 How It Works
+
+```text
+                    🎙️ User Speaks
+                           │
+                           ▼
+                   Agora RTC Voice
+                           │
+                           ▼
+                Deepgram Speech-to-Text
+                           │
+                           ▼
+                    Gemini LLM 🧠
+                           │
+                           ▼
+                  AI Generates Response
+                           │
+                           ▼
+                 MiniMax Text-to-Speech
+                           │
+                           ▼
+                    🔊 Mio Responds
+```
+
+---
+
+## ✨ Features
+
+* 🎙️ Real-time two-way voice conversations
+* 🤖 AI assistant powered by Agora Conversational AI
+* 🧠 Gemini LLM integration using BYOK
+* 🗣️ Deepgram Speech-to-Text (ASR)
+* 🔊 MiniMax Text-to-Speech (TTS)
+* 🔐 Secure RTC token generation using FastAPI
+* 📱 Modern SwiftUI voice calling interface
+* ⏱️ Live call timer
+* 🎤 Mute / Unmute microphone
+* 🔈 Speaker toggle
+* 📶 Connection state monitoring
+* 🤖 Automatic AI agent start & stop
+
+---
+
+# 🏗️ Technical Architecture
+
+```text
 SwiftUI App
       │
       │ RTC Token Request
@@ -38,182 +139,9 @@ Agora Conversational AI
       │
       ├── Deepgram (Speech Recognition)
       ├── Gemini (LLM)
-      └── MiniMax (Text To Speech)
+      └── MiniMax (Text-to-Speech)
 ```
 
----
-
-## Tech Stack
-
-### iOS
-
-- SwiftUI
-- Agora iOS SDK
-- AVFoundation
-- URLSession
-- Combine
-
-### Backend
-
-- Python
-- FastAPI
-- Uvicorn
-- HTTPX
-
-### AI Services
-
-- Agora Conversational AI
-- Google Gemini
-- Deepgram ASR
-- MiniMax TTS
-
----
-
-## Backend Endpoints
-
-### Generate RTC Token
-
-```
-GET /rtc-token
-```
-
-Returns
-
-```json
-{
-    "appId": "...",
-    "token": "...",
-    "channel": "Test",
-    "uid": 1001
-}
-```
-
----
-
-### Start AI Agent
-
-```
-POST /agent/start
-```
-
-```json
-{
-    "channel":"Test"
-}
-```
-
----
-
-### Stop AI Agent
-
-```
-POST /agent/stop
-```
-
----
-
-## Project Structure
-
-```
-AgoraBackend/
-│
-├── main.py
-├── agent_service.py
-├── token_service.py
-├── config.py
-├── models.py
-└── .env
-```
-
-```
-AgoraTest/
-│
-├── AgoraManager.swift
-├── AudioCallView.swift
-├── VoiceOrbView.swift
-├── CallHeaderView.swift
-└── Components/
-```
-
----
-
-## Environment Variables
-
-```
-AGORA_APP_ID=
-AGORA_APP_CERTIFICATE=
-AGORA_CUSTOMER_ID=
-AGORA_CUSTOMER_SECRET=
-AGORA_PIPELINE_ID=
-
-GEMINI_API_KEY=
-```
-
-> Never commit `.env` files or API keys to GitHub.
-
----
-
-## Running the Backend
-
-```bash
-python3 -m uvicorn main:app --reload --port 8000
-```
-
-Swagger
-
-```
-http://127.0.0.1:8000/docs
-```
-
----
-
-## Running the iOS App
-
-1. Start the FastAPI backend.
-2. Launch the SwiftUI app.
-3. Request RTC token.
-4. Join Agora channel.
-5. Backend starts AI agent.
-6. Begin voice conversation.
-
----
-
-## Current Status
-
-✅ RTC token generation
-
-✅ Agora channel connection
-
-✅ AI agent lifecycle management
-
-✅ Gemini integration
-
-✅ Deepgram ASR
-
-✅ MiniMax TTS
-
-✅ SwiftUI voice call interface
-
-⚠️ Note: Audio quality and microphone behavior may vary when testing in the iOS Simulator. A physical iOS device is recommended for the best real-time voice experience.
-
----
-
-## Future Improvements
-
-- Conversation history
-- Voice selection
-- Multi-language support
-- Streaming transcription
-- Interruptible AI responses
-- Call recording
-- Authentication
-- Push notifications
-
----
-
-## License
-
-MIT
 
 <img width="1320" height="2868" alt="simulator_screenshot_1792A7DD-C06B-47D7-B953-22F5D55FA236" src="https://github.com/user-attachments/assets/5986f97d-4316-4e5c-9695-8d88644afd7b" />
 
